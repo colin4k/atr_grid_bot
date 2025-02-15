@@ -1,0 +1,8 @@
+api:
+  key: "您的API密钥"
+  secret: "您的API密钥密文"
+
+trading:
+  symbol: "SOLUSDT"
+  investment: 1000  # 投资金额（USDT）
+  lookback_days: 30  # 新增这一行 
