@@ -234,6 +234,12 @@ class GridTrading:
                     'price': upper_price,
                     'quantity': quantity
                 }
+                order = self._place_order(**order_params)
+                if order:
+                    orders.append(order)
+                    successful_orders += 1
+                    self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
+                                   f"方向: {order_params['side']}, 价格: {order_params['price']}, 数量: {quantity}")
             elif current_price < lower_price:
                 # 当前价格低于网格价格，创建卖单（等待价格回升）
                 order_params = {
@@ -241,8 +247,14 @@ class GridTrading:
                     'price': lower_price,
                     'quantity': quantity
                 }
+                order = self._place_order(**order_params)
+                if order:
+                    orders.append(order)
+                    successful_orders += 1
+                    self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
+                                   f"方向: {order_params['side']}, 价格: {order_params['price']}, 数量: {quantity}")
             else:
-                # 当前价格在网格区间内
+                # 当前价格在网格区间内，只创建这个区间的买卖单
                 # 创建低于当前价格的买单
                 buy_order = self._place_order(
                     side='BUY',
@@ -266,17 +278,8 @@ class GridTrading:
                     successful_orders += 1
                     self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 卖单 "
                                    f"价格: {upper_price}, 数量: {quantity}")
-                
-                continue
             
-            # 下单并记录
-            order = self._place_order(**order_params)
-            if order:
-                orders.append(order)
-                successful_orders += 1
-                self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
-                               f"方向: {order_params['side']}, 价格: {order_params['price']}, 数量: {quantity}")
-                time.sleep(0.5)
+            time.sleep(0.5)  # 添加短暂延迟避免API限制
         
         self.logger.info(f"网格订单创建完成 - 成功创建 {successful_orders}/{num_grids} 个订单")
         
