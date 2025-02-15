@@ -391,9 +391,28 @@ class GridTrading:
     def _rebalance_grids(self):
         """重新平衡网格"""
         self.logger.info("开始重新平衡网格...")
+        
         if not self.test_mode:
-            # 修改：使用正确的API方法取消所有订单
-            self.client.cancel_open_orders(symbol=self.symbol)
+            try:
+                # 获取所有未完成订单
+                open_orders = self.client.get_open_orders(symbol=self.symbol)
+                
+                # 逐一取消订单
+                for order in open_orders:
+                    try:
+                        self.client.cancel_order(
+                            symbol=self.symbol,
+                            orderId=order['orderId']
+                        )
+                        self.logger.info(f"已取消订单 ID: {order['orderId']}")
+                        time.sleep(0.1)  # 添加小延迟避免请求过快
+                    except Exception as e:
+                        self.logger.error(f"取消订单失败 ID: {order['orderId']}, 错误: {str(e)}")
+                        continue
+                
+                self.logger.info("所有未完成订单已取消")
+            except Exception as e:
+                self.logger.error(f"获取或取消订单时发生错误: {str(e)}")
         
         # 获取最新市场数据
         df = self.get_historical_data(lookback_days=self.lookback_days)
@@ -535,11 +554,8 @@ class GridTrading:
             self.last_known_price = None
 
     def _restore_orders(self, saved_orders):
-        """恢复之前的订单"""
+        """恢复之前的状态，不进行实际的订单操作"""
         try:
-            # 修改：使用正确的API方法取消所有现有订单
-            self.client.cancel_open_orders(symbol=self.symbol)
-            
             # 获取当前市场价格
             current_price = float(self.client.get_symbol_ticker(symbol=self.symbol)['price'])
             
@@ -550,23 +566,12 @@ class GridTrading:
                     self.logger.info("价格变化显著，需要重新生成网格")
                     return False
                 
-                # 重新下达保存的订单
-                for order in saved_orders:
-                    try:
-                        self._place_order(
-                            side=order['side'],
-                            price=order['price'],
-                            quantity=order['quantity']
-                        )
-                    except Exception as e:
-                        self.logger.error(f"恢复订单失败: {str(e)}")
-                
-                self.logger.info("已恢复之前的订单")
+                self.logger.info("已恢复之前的网格状态")
                 return True
             
             return False
         except Exception as e:
-            self.logger.error(f"恢复订单过程中出错: {str(e)}")
+            self.logger.error(f"恢复状态过程中出错: {str(e)}")
             return False
 
     def get_active_orders(self):
