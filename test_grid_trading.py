@@ -119,6 +119,11 @@ class TestGridTrading(unittest.TestCase):
         try:
             # 设置模拟client
             mock_client_class.return_value = self.mock_client
+            
+            # 设置 get_symbol_ticker 的返回值
+            current_price = float(real_client.get_symbol_ticker(symbol=self.symbol)['price'])
+            self.mock_client.get_symbol_ticker.return_value = {'price': str(current_price)}
+            
             self.grid_trading.client = self.mock_client
             
             # 使用真实数据生成网格
@@ -137,7 +142,6 @@ class TestGridTrading(unittest.TestCase):
             
             # 计算网格参数
             atr = self.grid_trading.calculate_volatility(df)
-            current_price = float(real_client.get_symbol_ticker(symbol=self.symbol)['price'])
             grid_prices = self.grid_trading.generate_grid_parameters(current_price, atr)
             
             # 测试下单

@@ -77,14 +77,14 @@ class GridTrading:
         
         # 根据波动率动态调整网格数量和范围
         if volatility_ratio < 0.02:
-            num_grids = 20  # 低波动性时使用更多网格，赚取小幅波动
-            grid_range = 2.5 * atr
+            num_grids = 10  # 减少网格数量
+            grid_range = 0.15 * current_price  # 设置为当前价格的15%范围
         elif volatility_ratio < 0.05:
-            num_grids = 15  # 中等波动性
-            grid_range = 3 * atr
+            num_grids = 8
+            grid_range = 0.2 * current_price   # 设置为当前价格的20%范围
         else:
-            num_grids = 10   # 高波动性时使用较少网格，降低风险
-            grid_range = 3.5 * atr
+            num_grids = 6
+            grid_range = 0.25 * current_price  # 设置为当前价格的25%范围
         
         grid_step = grid_range / num_grids
         
