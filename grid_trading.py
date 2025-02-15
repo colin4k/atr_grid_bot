@@ -129,14 +129,13 @@ class GridTrading:
         return symbol_positions
 
     def generate_grid_parameters(self, current_price, atr, current_positions=None):
-        """基于ATR波动率优化的网格参数生成"""
+        """优化后的网格参数生成"""
         # 使用配置的价格范围
         lower_price = self.lower_price
         upper_price = self.upper_price
         
-        # 计算基于ATR的动态价格范围
+        # 根据市场波动性动态调整网格数量
         volatility_ratio = atr / current_price
-        self.logger.info(f"当前ATR波动率: {volatility_ratio:.4f}")
         
         # 根据波动率动态调整网格数量
         if volatility_ratio < 0.02:
@@ -149,49 +148,44 @@ class GridTrading:
         # 计算网格步长
         grid_range = upper_price - lower_price
         grid_step = grid_range / num_grids
+        
+        # 考虑持仓情况调整网格中心
+        if current_positions:
+            base_asset = self.symbol.replace('USDT', '')
+            if base_asset in current_positions:
+                avg_position_price = self.get_average_position_price()
+                if avg_position_price:
+                    # 确保网格中心点在设定范围内
+                    grid_center = min(max(avg_position_price, lower_price), upper_price)
+                    return self._generate_grid_prices(grid_center, grid_step, num_grids)
+        
+        # 使用当前价格作为网格中心，但确保在设定范围内
+        grid_center = min(max(current_price, lower_price), upper_price)
+        return self._generate_grid_prices(grid_center, grid_step, num_grids)
 
-        
-        # 生成网格价格
+    def _generate_grid_prices(self, center_price, grid_step, num_grids):
+        """生成网格价格"""
         grid_prices = []
+        half_range = (num_grids * grid_step) / 2
         
-        # 从当前价格向下生成买入价格
-        current_grid_price = current_price
-        while current_grid_price > lower_price and len(grid_prices) < num_grids // 2:
-            current_grid_price = current_price - (len(grid_prices) + 1) * grid_step
-            if current_grid_price >= lower_price:
-                grid_prices.insert(0, round(current_grid_price, 8))
+        # 确保网格价格不会超出配置的范围
+        start_price = max(self.lower_price, center_price - half_range)
+        end_price = min(self.upper_price, center_price + half_range)
         
-        # 添加当前价格
-        grid_prices.append(round(current_price, 8))
+        # 重新计算实际使用的网格步长
+        actual_range = end_price - start_price
+        actual_step = actual_range / num_grids
         
-        # 从当前价格向上生成卖出价格
-        current_grid_price = current_price
-        while current_grid_price < upper_price and len(grid_prices) < num_grids:
-            current_grid_price = current_price + len(grid_prices) * grid_step
-            if current_grid_price <= upper_price:
-                grid_prices.append(round(current_grid_price, 8))
-        
-        self.logger.info(f"基于ATR生成网格 - 网格数量: {len(grid_prices)}, 网格步长: {grid_step:.4f}")
-        self.logger.info(f"价格范围: {grid_prices[0]:.4f} - {grid_prices[-1]:.4f}")
-        
+        for i in range(num_grids + 1):
+            grid_price = start_price + i * actual_step
+            grid_prices.append(round(grid_price, 8))  # 根据交易对精度调整
+            
         return grid_prices
 
     def place_grid_orders(self, grid_prices, current_positions=None):
-        """基于ATR优化的网格订单设置"""
+        """优化后的网格订单设置"""
         current_price = float(self.client.get_symbol_ticker(symbol=self.symbol)['price'])
         self.logger.info(f"开始设置网格订单 - 当前价格: {current_price}")
-        
-        # 获取最新的ATR值
-        df = self.get_historical_data(lookback_days=self.lookback_days)
-        atr = self.calculate_volatility(df)
-        
-        # 计算动态的订单数量调整因子
-        volatility_ratio = atr / current_price
-        quantity_adjustment = 1.0
-        if volatility_ratio > 0.05:  # 高波动率时减少单笔订单数量
-            quantity_adjustment = 0.8
-        elif volatility_ratio < 0.02:  # 低波动率时增加单笔订单数量
-            quantity_adjustment = 1.2
         
         # 获取账户余额信息
         account = self.client.get_account()
@@ -199,6 +193,7 @@ class GridTrading:
         
         self.logger.info(f"当前USDT余额: {usdt_balance}")
         
+        # 验证是否有足够的余额进行交易
         if usdt_balance < self.investment:
             self.logger.error(f"账户余额不足: 需要 {self.investment} USDT, 实际只有 {usdt_balance} USDT")
             return []
@@ -207,55 +202,85 @@ class GridTrading:
         self.current_grid_prices = grid_prices
         self.last_known_price = current_price
         
-        num_grids = len(grid_prices) - 1
-        amount_per_grid = (self.investment / num_grids) * quantity_adjustment
+        # 修改：确保投资金额合理分配到每个网格
+        num_grids = len(grid_prices) - 1  # 网格数量
+        amount_per_grid = self.investment / num_grids  # 每个网格分配的资金
         
         # 获取交易对的最小交易数量和价格精度
         symbol_info = self.client.get_symbol_info(self.symbol)
         lot_size_filter = next(filter(lambda x: x['filterType'] == 'LOT_SIZE', symbol_info['filters']))
+        price_filter = next(filter(lambda x: x['filterType'] == 'PRICE_FILTER', symbol_info['filters']))
+        
         min_qty = float(lot_size_filter['minQty'])
         qty_step = float(lot_size_filter['stepSize'])
+        price_precision = int(price_filter['tickSize'].find('1') - 1)
         
         orders = []
         successful_orders = 0
         
         for i in range(len(grid_prices) - 1):
-            grid_price = grid_prices[i]
-            next_grid_price = grid_prices[i + 1]
+            lower_price = grid_prices[i]
+            upper_price = grid_prices[i + 1]
             
-            # 基于ATR调整后的数量计算
-            quantity = amount_per_grid / ((grid_price + next_grid_price) / 2)
+            # 计算当前网格的数量
+            quantity = amount_per_grid / ((lower_price + upper_price) / 2)
             quantity = self._adjust_quantity(quantity, min_qty, qty_step)
             
-            # 设置买卖订单
-            if grid_price < current_price:
-                # 买单：价格低于当前市价
+            # 修正：根据当前价格决定买卖方向
+            if current_price > upper_price:
+                # 当前价格高于网格价格，创建买单（等待价格回落）
                 order_params = {
                     'side': 'BUY',
-                    'price': grid_price,
+                    'price': upper_price,
                     'quantity': quantity
                 }
-            elif next_grid_price > current_price:
-                # 卖单：价格高于当前市价
+            elif current_price < lower_price:
+                # 当前价格低于网格价格，创建卖单（等待价格回升）
                 order_params = {
                     'side': 'SELL',
-                    'price': next_grid_price,
+                    'price': lower_price,
                     'quantity': quantity
                 }
             else:
+                # 当前价格在网格区间内
+                # 创建低于当前价格的买单
+                buy_order = self._place_order(
+                    side='BUY',
+                    price=lower_price,
+                    quantity=quantity
+                )
+                if buy_order:
+                    orders.append(buy_order)
+                    successful_orders += 1
+                    self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 买单 "
+                                   f"价格: {lower_price}, 数量: {quantity}")
+                
+                # 创建高于当前价格的卖单
+                sell_order = self._place_order(
+                    side='SELL',
+                    price=upper_price,
+                    quantity=quantity
+                )
+                if sell_order:
+                    orders.append(sell_order)
+                    successful_orders += 1
+                    self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 卖单 "
+                                   f"价格: {upper_price}, 数量: {quantity}")
+                
                 continue
             
+            # 下单并记录
             order = self._place_order(**order_params)
             if order:
                 orders.append(order)
                 successful_orders += 1
                 self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
-                               f"方向: {order_params['side']}, 价格: {order_params['price']}, "
-                               f"数量: {quantity}, ATR调整因子: {quantity_adjustment:.2f}")
-            
-            time.sleep(0.5)
+                               f"方向: {order_params['side']}, 价格: {order_params['price']}, 数量: {quantity}")
+                time.sleep(0.5)
         
         self.logger.info(f"网格订单创建完成 - 成功创建 {successful_orders}/{num_grids} 个订单")
+        
+        # 保存状态
         self.save_state()
         return orders
 
