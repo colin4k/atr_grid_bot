@@ -228,22 +228,22 @@ class GridTrading:
             
             # 修正：根据当前价格决定买卖方向
             if current_price > upper_price:
-                # 当前价格高于网格价格，创建卖单（因为价格已经超过了上限）
+                # 当前价格高于网格价格，创建买单（等待价格回落）
                 order_params = {
-                    'side': 'SELL',
+                    'side': 'BUY',
                     'price': upper_price,
                     'quantity': quantity
                 }
             elif current_price < lower_price:
-                # 当前价格低于网格价格，创建买单（因为价格已经低于下限）
+                # 当前价格低于网格价格，创建卖单（等待价格回升）
                 order_params = {
-                    'side': 'BUY',
+                    'side': 'SELL',
                     'price': lower_price,
                     'quantity': quantity
                 }
             else:
                 # 当前价格在网格区间内
-                # 创建低于当前价格的买单（等价格下跌时买入）
+                # 创建低于当前价格的买单
                 buy_order = self._place_order(
                     side='BUY',
                     price=lower_price,
@@ -255,7 +255,7 @@ class GridTrading:
                     self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 买单 "
                                    f"价格: {lower_price}, 数量: {quantity}")
                 
-                # 创建高于当前价格的卖单（等价格上涨时卖出）
+                # 创建高于当前价格的卖单
                 sell_order = self._place_order(
                     side='SELL',
                     price=upper_price,
