@@ -95,33 +95,49 @@ class TestGridTrading(unittest.TestCase):
     @patch('binance.client.Client')
     def test_order_placement(self, mock_client_class):
         """使用真实价格但模拟下单"""
-        # 设置模拟client
+        # 保存真实client的引用
+        real_client = self.grid_trading.client
+        
+        # 设置模拟client用于下单
         mock_client_class.return_value = self.mock_client
-        self.grid_trading.client = self.mock_client
         
-        # 使用真实市场数据
-        df = self.grid_trading.get_historical_data(lookback_days=7)
-        atr = self.grid_trading.calculate_volatility(df)
-        current_price = float(self.real_client.get_symbol_ticker(symbol=self.symbol)['price'])
-        
-        # 生成网格并测试下单
-        grid_prices = self.grid_trading.generate_grid_parameters(current_price, atr)
-        orders = self.grid_trading.place_grid_orders(grid_prices)
-        
-        # 验证订单
-        self.assertTrue(len(orders) > 0)
-        for order in orders:
-            self.assertEqual(order['status'], 'TEST')
-            self.assertIn(order['side'], ['BUY', 'SELL'])
-            self.assertEqual(order['symbol'], self.symbol)
+        try:
+            # 使用真实client获取市场数据
+            df = real_client.get_klines(
+                symbol=self.symbol,
+                interval='1h',
+                limit=168  # 7天 * 24小时
+            )
+            df = pd.DataFrame(df, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 
+                                         'close_time', 'quote_volume', 'trades', 'taker_buy_base', 
+                                         'taker_buy_quote', 'ignored'])
             
-            # 打印订单详情
-            print(f"测试订单 - 方向: {order['side']}, 价格: {order['price']}, "
-                  f"数量: {order['quantity']}, "
-                  f"金额: {float(order['price']) * float(order['quantity']):.2f} USDT")
+            # 计算ATR
+            atr = self.grid_trading.calculate_volatility(df)
+            current_price = float(real_client.get_symbol_ticker(symbol=self.symbol)['price'])
+            
+            # 切换到模拟client进行下单测试
+            self.grid_trading.client = self.mock_client
+            
+            # 生成网格并测试下单
+            grid_prices = self.grid_trading.generate_grid_parameters(current_price, atr)
+            orders = self.grid_trading.place_grid_orders(grid_prices)
+            
+            # 验证订单
+            self.assertTrue(len(orders) > 0)
+            for order in orders:
+                self.assertEqual(order['status'], 'TEST')
+                self.assertIn(order['side'], ['BUY', 'SELL'])
+                self.assertEqual(order['symbol'], self.symbol)
+                
+                # 打印订单详情
+                print(f"测试订单 - 方向: {order['side']}, 价格: {order['price']}, "
+                      f"数量: {order['quantity']}, "
+                      f"金额: {float(order['price']) * float(order['quantity']):.2f} USDT")
         
-        # 恢复真实client
-        self.grid_trading.client = self.real_client
+        finally:
+            # 确保恢复真实client
+            self.grid_trading.client = real_client
 
     def tearDown(self):
         """测试清理"""
