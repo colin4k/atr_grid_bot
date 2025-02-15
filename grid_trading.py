@@ -29,6 +29,8 @@ class GridTrading:
             self.lower_price = config.get('lower_price', 150)  # 添加下限价格配置
             self.upper_price = config.get('upper_price', 350)  # 添加上限价格配置
             self.lookback_days = config.get('trading', {}).get('lookback_days', 30)  # 添加回看天数配置
+            # 添加重新平衡时间间隔配置，默认为4小时
+            rebalance_hours = config.get('trading', {}).get('rebalance_hours', 4)
             
         # 状态文件路径
         self.state_file = f'states/grid_trading_state_{self.symbol}.json'
@@ -49,7 +51,7 @@ class GridTrading:
             'grid_profits': []  # 记录每个网格的盈利情况
         }
         self.last_rebalance_time = datetime.now()
-        self.rebalance_interval = timedelta(hours=24)  # 每24小时重新平衡一次网格
+        self.rebalance_interval = timedelta(hours=rebalance_hours)  # 使用配置的时间间隔
 
     def setup_logger(self):
         """设置日志记录器"""
@@ -405,15 +407,29 @@ class GridTrading:
 
     def _handle_filled_order(self, filled_order, current_price):
         """处理已成交订单"""
-        price = float(filled_order['price'])
-        grid_step = price * 0.01  # 假设网格步长为1%
+        self.logger.info(f"订单成交 - 价格: {filled_order['price']}, 方向: {filled_order['side']}")
         
-        if filled_order['side'] == 'BUY':
-            new_sell_price = price * (1 + grid_step)
-            self.place_grid_orders([new_sell_price])
-        else:
-            new_buy_price = price * (1 - grid_step)
-            self.place_grid_orders([new_buy_price])
+        # 更新交易统计
+        self.update_trade_stats(filled_order)
+        
+        # 检查是否接近重新平衡时间
+        time_to_rebalance = self.last_rebalance_time + self.rebalance_interval - datetime.now()
+        
+        # 如果距离下次重新平衡时间不到5分钟，则等待重新平衡
+        if time_to_rebalance.total_seconds() < 300:  # 5分钟 = 300秒
+            self.logger.info("接近重新平衡时间点，等待完整网格重新平衡")
+            return
+        
+        # 获取最新市场数据
+        df = self.get_historical_data(lookback_days=self.lookback_days)
+        atr = self.calculate_volatility(df)
+        current_positions = self.get_current_positions()
+        
+        # 重新生成完整的网格
+        grid_prices = self.generate_grid_parameters(current_price, atr, current_positions)
+        self.place_grid_orders(grid_prices, current_positions)
+        
+        self.logger.info("已重新生成网格订单")
 
     def update_trade_stats(self, trade):
         """更新交易统计"""

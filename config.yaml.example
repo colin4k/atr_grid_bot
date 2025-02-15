@@ -10,4 +10,5 @@ trading:
   symbol: "BTCUSDT"  # 交易对
   investment: 1000    # 投资金额（USDT）
   lookback_days: 30    # 回看天数
+  rebalance_hours: 4  # 设置每4小时重新平衡一次网格
   
