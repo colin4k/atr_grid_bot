@@ -28,6 +28,7 @@ class GridTrading:
             self.fee_rate = config.get('fee_rate', 0.001)  # 如果未配置则使用默认值0.001
             self.lower_price = config.get('lower_price', 150)  # 添加下限价格配置
             self.upper_price = config.get('upper_price', 350)  # 添加上限价格配置
+            self.lookback_days = config.get('trading', {}).get('lookback_days', 30)  # 添加回看天数配置
             
         # 状态文件路径
         self.state_file = f'states/grid_trading_state_{self.symbol}.json'
@@ -204,6 +205,9 @@ class GridTrading:
         price_precision = int(price_filter['tickSize'].find('1') - 1)
         
         orders = []
+        successful_orders = 0
+        max_retries = 3  # 每个订单最大重试次数
+        
         for i in range(len(grid_prices) - 1):  # 遍历相邻的价格对
             lower_price = grid_prices[i]
             upper_price = grid_prices[i + 1]
@@ -218,14 +222,37 @@ class GridTrading:
             
             # 根据当前价格决定买卖方向
             if lower_price < current_price:
-                order = self._place_order('SELL', upper_price, quantity)
+                order_params = {'side': 'SELL', 'price': upper_price, 'quantity': quantity}
             else:
-                order = self._place_order('BUY', lower_price, quantity)
+                order_params = {'side': 'BUY', 'price': lower_price, 'quantity': quantity}
             
-            if order:
-                orders.append(order)
-                self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单 - 方向: {order['side']}, "
-                               f"价格: {order['price']}, 数量: {quantity}")
+            # 添加重试逻辑
+            for retry in range(max_retries):
+                try:
+                    order = self._place_order(
+                        side=order_params['side'],
+                        price=order_params['price'],
+                        quantity=order_params['quantity']
+                    )
+                    
+                    if order:
+                        orders.append(order)
+                        successful_orders += 1
+                        self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
+                                       f"方向: {order['side']}, 价格: {order['price']}, 数量: {quantity}")
+                        time.sleep(0.5)  # 添加0.5秒延时
+                        break
+                    else:
+                        self.logger.warning(f"下单失败，尝试重试 ({retry + 1}/{max_retries})")
+                        time.sleep(1)  # 失败后等待1秒再重试
+                except Exception as e:
+                    self.logger.error(f"下单出错: {str(e)}, 尝试重试 ({retry + 1}/{max_retries})")
+                    if retry == max_retries - 1:  # 最后一次重试
+                        self.logger.error(f"订单创建最终失败 - 方向: {order_params['side']}, "
+                                        f"价格: {order_params['price']}, 数量: {quantity}")
+                    time.sleep(1)
+        
+        self.logger.info(f"网格订单创建完成 - 成功创建 {successful_orders}/{num_grids} 个订单")
         
         # 保存状态
         self.save_state()
@@ -286,7 +313,7 @@ class GridTrading:
         if not hasattr(self, 'current_grid_prices') or self.current_grid_prices is None:
             self.logger.info("创建初始网格...")
             # 获取最新市场数据
-            df = self.get_historical_data(lookback_days=7)
+            df = self.get_historical_data(lookback_days=self.lookback_days)  # 使用配置的回看天数
             atr = self.calculate_volatility(df)
             current_price = float(self.client.get_symbol_ticker(symbol=self.symbol)['price'])
             current_positions = self.get_current_positions()
@@ -337,7 +364,7 @@ class GridTrading:
             self.client.cancel_all_orders(symbol=self.symbol)
         
         # 获取最新市场数据
-        df = self.get_historical_data(lookback_days=7)
+        df = self.get_historical_data(lookback_days=self.lookback_days)  # 使用配置的回看天数
         atr = self.calculate_volatility(df)
         current_price = float(self.client.get_symbol_ticker(symbol=self.symbol)['price'])
         current_positions = self.get_current_positions()
