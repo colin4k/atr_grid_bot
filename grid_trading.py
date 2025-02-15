@@ -110,10 +110,21 @@ class GridTrading:
     def _generate_grid_prices(self, center_price, grid_step, num_grids):
         """生成网格价格"""
         grid_prices = []
-        for i in range(-num_grids, num_grids + 1):
-            grid_price = center_price * (1 + i * grid_step)
+        half_range = (num_grids * grid_step) / 2
+        
+        # 确保网格价格不会超出配置的范围
+        start_price = max(self.lower_price, center_price - half_range)
+        end_price = min(self.upper_price, center_price + half_range)
+        
+        # 重新计算实际使用的网格步长
+        actual_range = end_price - start_price
+        actual_step = actual_range / num_grids
+        
+        for i in range(num_grids + 1):
+            grid_price = start_price + i * actual_step
             grid_prices.append(round(grid_price, 8))  # 根据交易对精度调整
-        return sorted(grid_prices)
+            
+        return grid_prices
 
     def place_grid_orders(self, grid_prices, current_positions=None):
         """优化后的网格订单设置"""
