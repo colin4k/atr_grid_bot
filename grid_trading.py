@@ -281,6 +281,21 @@ class GridTrading:
     def monitor_and_adjust(self):
         """优化后的监控和调整功能"""
         self.logger.info("开始监控和调整网格...")
+        
+        # 添加：如果没有当前网格价格，先创建初始网格
+        if not hasattr(self, 'current_grid_prices') or self.current_grid_prices is None:
+            self.logger.info("创建初始网格...")
+            # 获取最新市场数据
+            df = self.get_historical_data(lookback_days=7)
+            atr = self.calculate_volatility(df)
+            current_price = float(self.client.get_symbol_ticker(symbol=self.symbol)['price'])
+            current_positions = self.get_current_positions()
+            
+            # 生成新的网格并下单
+            grid_prices = self.generate_grid_parameters(current_price, atr, current_positions)
+            self.place_grid_orders(grid_prices, current_positions)
+            self.logger.info("初始网格创建完成")
+
         while True:
             try:
                 # 检查是否需要重新平衡网格
