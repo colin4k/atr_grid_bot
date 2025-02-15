@@ -9,14 +9,18 @@ import os
 import json
 
 class GridTrading:
-    def __init__(self, api_key, api_secret, symbol, investment_amount, test_mode=False):
+    def __init__(self, api_key, api_secret, symbol, investment_amount, test_mode=False, ignore_orders=False):
         self.client = Client(api_key, api_secret)
         self.symbol = symbol
         self.investment = investment_amount
         self.test_mode = test_mode
+        self.ignore_orders = ignore_orders  # 新增参数
         
         # 设置日志
         self.setup_logger()
+        
+        if self.ignore_orders:
+            self.logger.info("已启用忽略历史订单模式")
         
         # 从配置文件加载配置参数
         with open('config.yaml', 'r', encoding='utf-8') as f:
@@ -416,7 +420,7 @@ class GridTrading:
     def load_state(self):
         """从文件加载状态"""
         try:
-            if os.path.exists(self.state_file):
+            if os.path.exists(self.state_file) and not self.ignore_orders:  # 增加ignore_orders检查
                 with open(self.state_file, 'r') as f:
                     state = json.load(f)
                 
@@ -431,7 +435,10 @@ class GridTrading:
                 if not self.test_mode:
                     self._restore_orders(state['active_orders'])
             else:
-                self.logger.info("未找到之前的状态文件，使用初始状态")
+                if self.ignore_orders:
+                    self.logger.info("忽略历史订单模式：使用初始状态")
+                else:
+                    self.logger.info("未找到之前的状态文件，使用初始状态")
                 self.current_grid_prices = None
                 self.last_known_price = None
         except Exception as e:
