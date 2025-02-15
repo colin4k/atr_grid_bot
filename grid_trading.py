@@ -239,7 +239,7 @@ class GridTrading:
                         orders.append(order)
                         successful_orders += 1
                         self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
-                                       f"方向: {order['side']}, 价格: {order['price']}, 数量: {quantity}")
+                                       f"方向: {order_params['side']}, 价格: {order_params['price']}, 数量: {quantity}")
                         time.sleep(0.5)  # 添加0.5秒延时
                         break
                     else:
