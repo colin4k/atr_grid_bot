@@ -187,6 +187,17 @@ class GridTrading:
         current_price = float(self.client.get_symbol_ticker(symbol=self.symbol)['price'])
         self.logger.info(f"开始设置网格订单 - 当前价格: {current_price}")
         
+        # 获取账户余额信息
+        account = self.client.get_account()
+        usdt_balance = float(next((asset['free'] for asset in account['balances'] if asset['asset'] == 'USDT'), 0))
+        
+        self.logger.info(f"当前USDT余额: {usdt_balance}")
+        
+        # 验证是否有足够的余额进行交易
+        if usdt_balance < self.investment:
+            self.logger.error(f"账户余额不足: 需要 {self.investment} USDT, 实际只有 {usdt_balance} USDT")
+            return []
+        
         # 保存网格价格和当前价格
         self.current_grid_prices = grid_prices
         self.last_known_price = current_price
@@ -206,51 +217,66 @@ class GridTrading:
         
         orders = []
         successful_orders = 0
-        max_retries = 3  # 每个订单最大重试次数
         
-        for i in range(len(grid_prices) - 1):  # 遍历相邻的价格对
+        for i in range(len(grid_prices) - 1):
             lower_price = grid_prices[i]
             upper_price = grid_prices[i + 1]
             
             # 计算当前网格的数量
-            quantity = amount_per_grid / ((lower_price + upper_price) / 2)  # 使用平均价格计算数量
+            quantity = amount_per_grid / ((lower_price + upper_price) / 2)
             quantity = self._adjust_quantity(quantity, min_qty, qty_step)
             
-            # 确保数量大于最小交易量
-            if quantity < min_qty:
-                quantity = min_qty
-            
-            # 根据当前价格决定买卖方向
-            if lower_price < current_price:
-                order_params = {'side': 'SELL', 'price': upper_price, 'quantity': quantity}
+            # 修正：根据当前价格决定买卖方向
+            if current_price > upper_price:
+                # 当前价格高于网格价格，创建卖单（因为价格已经超过了上限）
+                order_params = {
+                    'side': 'SELL',
+                    'price': upper_price,
+                    'quantity': quantity
+                }
+            elif current_price < lower_price:
+                # 当前价格低于网格价格，创建买单（因为价格已经低于下限）
+                order_params = {
+                    'side': 'BUY',
+                    'price': lower_price,
+                    'quantity': quantity
+                }
             else:
-                order_params = {'side': 'BUY', 'price': lower_price, 'quantity': quantity}
+                # 当前价格在网格区间内
+                # 创建低于当前价格的买单（等价格下跌时买入）
+                buy_order = self._place_order(
+                    side='BUY',
+                    price=lower_price,
+                    quantity=quantity
+                )
+                if buy_order:
+                    orders.append(buy_order)
+                    successful_orders += 1
+                    self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 买单 "
+                                   f"价格: {lower_price}, 数量: {quantity}")
+                
+                # 创建高于当前价格的卖单（等价格上涨时卖出）
+                sell_order = self._place_order(
+                    side='SELL',
+                    price=upper_price,
+                    quantity=quantity
+                )
+                if sell_order:
+                    orders.append(sell_order)
+                    successful_orders += 1
+                    self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 卖单 "
+                                   f"价格: {upper_price}, 数量: {quantity}")
+                
+                continue
             
-            # 添加重试逻辑
-            for retry in range(max_retries):
-                try:
-                    order = self._place_order(
-                        side=order_params['side'],
-                        price=order_params['price'],
-                        quantity=order_params['quantity']
-                    )
-                    
-                    if order:
-                        orders.append(order)
-                        successful_orders += 1
-                        self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
-                                       f"方向: {order_params['side']}, 价格: {order_params['price']}, 数量: {quantity}")
-                        time.sleep(0.5)  # 添加0.5秒延时
-                        break
-                    else:
-                        self.logger.warning(f"下单失败，尝试重试 ({retry + 1}/{max_retries})")
-                        time.sleep(1)  # 失败后等待1秒再重试
-                except Exception as e:
-                    self.logger.error(f"下单出错: {str(e)}, 尝试重试 ({retry + 1}/{max_retries})")
-                    if retry == max_retries - 1:  # 最后一次重试
-                        self.logger.error(f"订单创建最终失败 - 方向: {order_params['side']}, "
-                                        f"价格: {order_params['price']}, 数量: {quantity}")
-                    time.sleep(1)
+            # 下单并记录
+            order = self._place_order(**order_params)
+            if order:
+                orders.append(order)
+                successful_orders += 1
+                self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
+                               f"方向: {order_params['side']}, 价格: {order_params['price']}, 数量: {quantity}")
+                time.sleep(0.5)
         
         self.logger.info(f"网格订单创建完成 - 成功创建 {successful_orders}/{num_grids} 个订单")
         
