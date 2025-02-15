@@ -239,7 +239,7 @@ class GridTrading:
                     orders.append(order)
                     created_order_prices.add(upper_price)
                     successful_orders += 1
-                    self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
+                    self.logger.info(f"下单成功 ({successful_orders}/{num_grids}) - "
                                    f"方向: BUY, 价格: {upper_price}, 数量: {quantity}")
             elif current_price < lower_price and lower_price not in created_order_prices:
                 order = self._place_order(
@@ -251,7 +251,7 @@ class GridTrading:
                     orders.append(order)
                     created_order_prices.add(lower_price)
                     successful_orders += 1
-                    self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
+                    self.logger.info(f"下单成功 ({successful_orders}/{num_grids}) - "
                                    f"方向: SELL, 价格: {lower_price}, 数量: {quantity}")
             else:
                 # 当前价格在网格区间内
@@ -265,8 +265,8 @@ class GridTrading:
                         orders.append(buy_order)
                         created_order_prices.add(lower_price)
                         successful_orders += 1
-                        self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 买单 "
-                                       f"价格: {lower_price}, 数量: {quantity}")
+                        self.logger.info(f"下单成功 ({successful_orders}/{num_grids}) - "
+                                       f"方向: BUY, 价格: {lower_price}, 数量: {quantity}")
                 
                 if upper_price not in created_order_prices:
                     sell_order = self._place_order(
@@ -278,8 +278,8 @@ class GridTrading:
                         orders.append(sell_order)
                         created_order_prices.add(upper_price)
                         successful_orders += 1
-                        self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 卖单 "
-                                       f"价格: {upper_price}, 数量: {quantity}")
+                        self.logger.info(f"下单成功 ({successful_orders}/{num_grids}) - "
+                                       f"方向: SELL, 价格: {upper_price}, 数量: {quantity}")
             
             time.sleep(0.5)
         
@@ -427,7 +427,14 @@ class GridTrading:
 
     def _handle_filled_order(self, filled_order, current_price):
         """处理已成交订单"""
-        self.logger.info(f"订单成交 - 价格: {filled_order['price']}, 方向: {filled_order['side']}")
+        # 添加更详细的成交信息日志
+        filled_price = float(filled_order['price'])
+        filled_qty = float(filled_order['qty'])
+        filled_side = filled_order['side']
+        total_value = filled_price * filled_qty
+        
+        self.logger.info(f"订单成交详情 - 方向: {filled_side}, 价格: {filled_price} USDT, "
+                        f"数量: {filled_qty}, 总价值: {total_value:.2f} USDT")
         
         # 更新交易统计
         self.update_trade_stats(filled_order)
@@ -445,11 +452,20 @@ class GridTrading:
         atr = self.calculate_volatility(df)
         current_positions = self.get_current_positions()
         
+        # 在创建新订单之前输出日志
+        opposite_side = 'SELL' if filled_side == 'BUY' else 'BUY'
+        self.logger.info(f"准备创建反向订单 - 方向: {opposite_side}, "
+                        f"当前市场价格: {current_price} USDT")
+        
         # 重新生成完整的网格
         grid_prices = self.generate_grid_parameters(current_price, atr, current_positions)
-        self.place_grid_orders(grid_prices, current_positions)
+        new_orders = self.place_grid_orders(grid_prices, current_positions)
         
-        self.logger.info("已重新生成网格订单")
+        # 输出新订单创建结果
+        if new_orders:
+            self.logger.info(f"已成功创建 {len(new_orders)} 个新的网格订单")
+        else:
+            self.logger.warning("未能成功创建新的网格订单")
 
     def update_trade_stats(self, trade):
         """更新交易统计"""
