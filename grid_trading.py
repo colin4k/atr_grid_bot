@@ -242,6 +242,15 @@ class GridTrading:
     def _place_order(self, side, price, quantity):
         """统一下单函数"""
         try:
+            # 获取交易对的价格精度
+            symbol_info = self.client.get_symbol_info(self.symbol)
+            price_filter = next(filter(lambda x: x['filterType'] == 'PRICE_FILTER', symbol_info['filters']))
+            tick_size = float(price_filter['tickSize'])
+            
+            # 根据tick_size调整价格精度
+            price_precision = len(str(tick_size).rstrip('0').split('.')[-1])
+            adjusted_price = round(price, price_precision)
+            
             if self.test_mode:
                 return {
                     'symbol': self.symbol,
@@ -249,7 +258,7 @@ class GridTrading:
                     'type': 'LIMIT',
                     'timeInForce': 'GTC',
                     'quantity': quantity,
-                    'price': price,
+                    'price': adjusted_price,
                     'status': 'TEST'
                 }
             else:
@@ -259,7 +268,7 @@ class GridTrading:
                     type='LIMIT',
                     timeInForce='GTC',
                     quantity=quantity,
-                    price=price
+                    price=adjusted_price
                 )
         except Exception as e:
             self.logger.error(f"下单失败 {side} {quantity} {price}: {str(e)}")
