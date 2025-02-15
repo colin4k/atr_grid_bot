@@ -217,7 +217,7 @@ class GridTrading:
         
         orders = []
         successful_orders = 0
-        current_grid_found = False  # 标记是否已找到并处理了当前价格所在的网格
+        created_order_prices = set()  # 用于跟踪已创建订单的价格
         
         for i in range(len(grid_prices) - 1):
             lower_price = grid_prices[i]
@@ -227,36 +227,7 @@ class GridTrading:
             quantity = amount_per_grid / ((lower_price + upper_price) / 2)
             quantity = self._adjust_quantity(quantity, min_qty, qty_step)
             
-            if lower_price <= current_price <= upper_price:
-                if not current_grid_found:  # 只处理第一个匹配的网格
-                    # 在当前价格所在的网格创建买卖订单
-                    buy_order = self._place_order(
-                        side='BUY',
-                        price=lower_price,
-                        quantity=quantity
-                    )
-                    if buy_order:
-                        orders.append(buy_order)
-                        successful_orders += 1
-                        self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 买单 "
-                                       f"价格: {lower_price}, 数量: {quantity}")
-                    
-                    sell_order = self._place_order(
-                        side='SELL',
-                        price=upper_price,
-                        quantity=quantity
-                    )
-                    if sell_order:
-                        orders.append(sell_order)
-                        successful_orders += 1
-                        self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 卖单 "
-                                       f"价格: {upper_price}, 数量: {quantity}")
-                    current_grid_found = True  # 标记已处理当前价格所在的网格
-                continue  # 跳过当前网格的其他处理
-            
-            # 处理其他网格
-            if current_price > upper_price:
-                # 当前价格高于网格价格，创建买单
+            if current_price > upper_price and upper_price not in created_order_prices:
                 order = self._place_order(
                     side='BUY',
                     price=upper_price,
@@ -264,11 +235,11 @@ class GridTrading:
                 )
                 if order:
                     orders.append(order)
+                    created_order_prices.add(upper_price)
                     successful_orders += 1
                     self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
                                    f"方向: BUY, 价格: {upper_price}, 数量: {quantity}")
-            elif current_price < lower_price:
-                # 当前价格低于网格价格，创建卖单
+            elif current_price < lower_price and lower_price not in created_order_prices:
                 order = self._place_order(
                     side='SELL',
                     price=lower_price,
@@ -276,9 +247,37 @@ class GridTrading:
                 )
                 if order:
                     orders.append(order)
+                    created_order_prices.add(lower_price)
                     successful_orders += 1
                     self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 ({successful_orders}/{num_grids}) - "
                                    f"方向: SELL, 价格: {lower_price}, 数量: {quantity}")
+            else:
+                # 当前价格在网格区间内
+                if lower_price not in created_order_prices:
+                    buy_order = self._place_order(
+                        side='BUY',
+                        price=lower_price,
+                        quantity=quantity
+                    )
+                    if buy_order:
+                        orders.append(buy_order)
+                        created_order_prices.add(lower_price)
+                        successful_orders += 1
+                        self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 买单 "
+                                       f"价格: {lower_price}, 数量: {quantity}")
+                
+                if upper_price not in created_order_prices:
+                    sell_order = self._place_order(
+                        side='SELL',
+                        price=upper_price,
+                        quantity=quantity
+                    )
+                    if sell_order:
+                        orders.append(sell_order)
+                        created_order_prices.add(upper_price)
+                        successful_orders += 1
+                        self.logger.info(f"{'测试模式：' if self.test_mode else ''}下单成功 - 卖单 "
+                                       f"价格: {upper_price}, 数量: {quantity}")
             
             time.sleep(0.5)
         
