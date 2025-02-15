@@ -392,10 +392,11 @@ class GridTrading:
         """重新平衡网格"""
         self.logger.info("开始重新平衡网格...")
         if not self.test_mode:
-            self.client.cancel_all_orders(symbol=self.symbol)
+            # 修改：使用正确的API方法取消所有订单
+            self.client.cancel_open_orders(symbol=self.symbol)
         
         # 获取最新市场数据
-        df = self.get_historical_data(lookback_days=self.lookback_days)  # 使用配置的回看天数
+        df = self.get_historical_data(lookback_days=self.lookback_days)
         atr = self.calculate_volatility(df)
         current_price = float(self.client.get_symbol_ticker(symbol=self.symbol)['price'])
         current_positions = self.get_current_positions()
@@ -536,8 +537,8 @@ class GridTrading:
     def _restore_orders(self, saved_orders):
         """恢复之前的订单"""
         try:
-            # 取消所有现有订单
-            self.client.cancel_all_orders(symbol=self.symbol)
+            # 修改：使用正确的API方法取消所有现有订单
+            self.client.cancel_open_orders(symbol=self.symbol)
             
             # 获取当前市场价格
             current_price = float(self.client.get_symbol_ticker(symbol=self.symbol)['price'])
