@@ -29,8 +29,10 @@ class TestGridTrading(unittest.TestCase):
         # 保存真实client用于获取市场数据
         self.real_client = self.grid_trading.client
         
-        # 创建模拟client
+        # 创建模拟client并设置必要的返回值
         self.mock_client = Mock()
+        
+        # 设置 get_symbol_info 的返回值
         self.mock_client.get_symbol_info.return_value = {
             'filters': [
                 {
@@ -43,6 +45,18 @@ class TestGridTrading(unittest.TestCase):
                     'tickSize': '0.01000000'
                 }
             ]
+        }
+        
+        # 获取真实价格并设置模拟返回值
+        current_price = float(self.real_client.get_symbol_ticker(symbol=self.symbol)['price'])
+        self.mock_client.get_symbol_ticker.return_value = {'price': str(current_price)}
+        
+        # 设置其他可能需要的模拟返回值
+        self.mock_client.get_account.return_value = {'balances': []}
+        self.mock_client.create_order.return_value = {
+            'symbol': self.symbol,
+            'orderId': '1234567',
+            'status': 'TEST'
         }
         
     def test_get_historical_data(self):
@@ -119,12 +133,13 @@ class TestGridTrading(unittest.TestCase):
         try:
             # 设置模拟client
             mock_client_class.return_value = self.mock_client
-            
-            # 设置 get_symbol_ticker 的返回值
-            current_price = float(real_client.get_symbol_ticker(symbol=self.symbol)['price'])
-            self.mock_client.get_symbol_ticker.return_value = {'price': str(current_price)}
-            
             self.grid_trading.client = self.mock_client
+            
+            # 获取当前价格（使用真实client）
+            current_price = float(real_client.get_symbol_ticker(symbol=self.symbol)['price'])
+            
+            # 更新模拟client的返回值
+            self.mock_client.get_symbol_ticker.return_value = {'price': str(current_price)}
             
             # 使用真实数据生成网格
             df = real_client.get_klines(
