@@ -138,23 +138,18 @@ class GridTrading:
         volatility_ratio = atr / current_price
         self.logger.info(f"当前ATR波动率: {volatility_ratio:.4f}")
         
-        # 根据波动率动态调整网格范围
-        if volatility_ratio < 0.02:  # 低波动率
-            grid_range_multiplier = 0.5  # 较小的价格范围
-            num_grids = 20  # 更多的网格
-        elif volatility_ratio < 0.05:  # 中等波动率
-            grid_range_multiplier = 1.0
+        # 根据波动率动态调整网格数量
+        if volatility_ratio < 0.02:
+            num_grids = 20  # 低波动率时使用更多网格
+        elif volatility_ratio < 0.05:
             num_grids = 15
-        else:  # 高波动率
-            grid_range_multiplier = 1.5  # 较大的价格范围
-            num_grids = 10  # 较少的网格
+        else:
+            num_grids = 10  # 高波动率时使用较少网格
         
-        # 使用ATR来调整网格步长
-        grid_step_base = atr * grid_range_multiplier
-        
-        # 确保网格范围在配置的上下限之内
-        price_range = upper_price - lower_price
-        grid_step = min(grid_step_base, price_range / num_grids)
+        # 计算网格步长
+        grid_range = upper_price - lower_price
+        grid_step = grid_range / num_grids
+
         
         # 生成网格价格
         grid_prices = []
