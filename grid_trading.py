@@ -478,4 +478,7 @@ class GridTrading:
                 'price': float(order['price']),
                 'quantity': float(order['origQty']),
                 'order_id': order['orderId']
-            } for order in orders] 
+            } for order in orders]
+        except Exception as e:
+            self.logger.error(f"获取活动订单时发生错误: {str(e)}")
+            return []
