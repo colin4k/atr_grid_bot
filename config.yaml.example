@@ -1,8 +1,11 @@
 api:
-  key: "您的API密钥"
-  secret: "您的API密钥密文"
+  key: "your_binance_api_key"
+  secret: "your_binance_api_secret"
+
+fee_rate: 0.001 
 
 trading:
-  symbol: "SOLUSDT"
-  investment: 1000  # 投资金额（USDT）
-  lookback_days: 30  # 新增这一行 
+  symbol: "BTCUSDT"  # 交易对
+  investment: 1000    # 投资金额（USDT）
+  lookback_days: 30    # 回看天数
+  
