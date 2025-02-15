@@ -40,7 +40,8 @@ class GridTrading:
         )
         
         df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote', 'ignored'])
-        df['close'] = pd.to_numeric(df['close'])
+        for col in ['open', 'high', 'low', 'close']:
+            df[col] = df[col].astype(float)
         return df
 
     def calculate_volatility(self, df, window=24):
