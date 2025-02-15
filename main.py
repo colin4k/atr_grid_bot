@@ -22,12 +22,12 @@ def main():
 
     args = parser.parse_args()
 
-    # 合并配置文件和命令行参数，优先使用命令行参数
+    # 从嵌套的配置结构中获取值
     params = {
-        'api_key': args.api_key or config.get('api_key'),
-        'api_secret': args.api_secret or config.get('api_secret'),
-        'symbol': args.symbol or config.get('symbol'),
-        'investment': args.investment or config.get('investment'),
+        'api_key': args.api_key or config.get('api', {}).get('key'),
+        'api_secret': args.api_secret or config.get('api', {}).get('secret'),
+        'symbol': args.symbol or config.get('trading', {}).get('symbol'),
+        'investment': args.investment or config.get('trading', {}).get('investment'),
         'test_mode': args.test_mode if args.test_mode is not None else config.get('test_mode', False),
         'ignore_orders': bool(args.ignore_orders if args.ignore_orders is not None else config.get('ignore_orders', 0))
     }
