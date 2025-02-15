@@ -164,7 +164,10 @@ class TestGridTrading(unittest.TestCase):
             
             # 验证订单
             self.assertTrue(len(orders) > 0)
-            for order in orders:
+            print(f"\n总共生成 {len(orders)} 个网格订单")
+            print("=" * 50)
+            
+            for i, order in enumerate(orders, 1):
                 self.assertEqual(order['status'], 'TEST')
                 self.assertIn(order['side'], ['BUY', 'SELL'])
                 self.assertEqual(order['symbol'], self.symbol)
@@ -173,8 +176,14 @@ class TestGridTrading(unittest.TestCase):
                 order_amount = float(order['price']) * float(order['quantity'])
                 self.assertTrue(order_amount >= 10)  # 确保订单金额不小于10USDT
                 
-                print(f"测试订单 - 方向: {order['side']}, 价格: {order['price']}, "
-                      f"数量: {order['quantity']}, 金额: {order_amount:.2f} USDT")
+                print(f"订单 {i}:")
+                print(f"  方向: {order['side']}")
+                print(f"  价格: {float(order['price']):.4f} USDT")
+                print(f"  数量: {float(order['quantity']):.8f} {self.symbol.replace('USDT', '')}")
+                print(f"  金额: {order_amount:.2f} USDT")
+                print("-" * 30)
+            
+            print(f"网格总投资额: {sum(float(order['price']) * float(order['quantity']) for order in orders):.2f} USDT")
         
         finally:
             # 恢复真实client
