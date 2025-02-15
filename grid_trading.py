@@ -304,4 +304,15 @@ class GridTrading:
             
             roi = (self.profit_stats['total_profit'] / self.investment) * 100
             print(f"投资回报率: {roi:.2f}%")
-            print("=====================") 
+            print("=====================")
+
+    def get_average_position_price(self):
+        """
+        计算当前持仓的平均价格
+        返回：如果有持仓则返回平均价格，如果没有持仓则返回None
+        """
+        positions = self.get_current_positions()
+        if not positions or positions['qty'] == 0:
+            return None
+            
+        return float(positions['entry_price']) 
