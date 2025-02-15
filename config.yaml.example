@@ -3,6 +3,8 @@ api:
   secret: "your_binance_api_secret"
 
 fee_rate: 0.001 
+lower_price: 150
+upper_price: 350
 
 trading:
   symbol: "BTCUSDT"  # 交易对

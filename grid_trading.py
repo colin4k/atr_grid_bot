@@ -12,10 +12,12 @@ class GridTrading:
         self.investment = investment_amount
         self.test_mode = test_mode
         
-        # 从配置文件加载手续费率
+        # 从配置文件加载配置参数
         with open('config.yaml', 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
             self.fee_rate = config.get('fee_rate', 0.001)  # 如果未配置则使用默认值0.001
+            self.lower_price = config.get('lower_price', 150)  # 添加下限价格配置
+            self.upper_price = config.get('upper_price', 350)  # 添加上限价格配置
             
         self.profit_stats = {
             'total_profit': 0,
@@ -72,20 +74,23 @@ class GridTrading:
 
     def generate_grid_parameters(self, current_price, atr, current_positions=None):
         """优化后的网格参数生成"""
-        # 根据市场波动性动态调整网格
+        # 使用配置的价格范围
+        lower_price = self.lower_price
+        upper_price = self.upper_price
+        
+        # 根据市场波动性动态调整网格数量
         volatility_ratio = atr / current_price
         
-        # 根据波动率动态调整网格数量和范围
+        # 根据波动率动态调整网格数量
         if volatility_ratio < 0.02:
-            num_grids = 10  # 减少网格数量
-            grid_range = 0.15 * current_price  # 设置为当前价格的15%范围
+            num_grids = 20  # 低波动率时使用更多网格
         elif volatility_ratio < 0.05:
-            num_grids = 8
-            grid_range = 0.2 * current_price   # 设置为当前价格的20%范围
+            num_grids = 15
         else:
-            num_grids = 6
-            grid_range = 0.25 * current_price  # 设置为当前价格的25%范围
+            num_grids = 10  # 高波动率时使用较少网格
         
+        # 计算网格步长
+        grid_range = upper_price - lower_price
         grid_step = grid_range / num_grids
         
         # 考虑持仓情况调整网格中心
@@ -94,13 +99,13 @@ class GridTrading:
             if base_asset in current_positions:
                 avg_position_price = self.get_average_position_price()
                 if avg_position_price:
-                    # 网格中心点为当前价格和持仓均价的加权平均
-                    position_weight = 0.3  # 持仓均价权重
-                    grid_center = (current_price * (1 - position_weight) + 
-                                 avg_position_price * position_weight)
+                    # 确保网格中心点在设定范围内
+                    grid_center = min(max(avg_position_price, lower_price), upper_price)
                     return self._generate_grid_prices(grid_center, grid_step, num_grids)
         
-        return self._generate_grid_prices(current_price, grid_step, num_grids)
+        # 使用当前价格作为网格中心，但确保在设定范围内
+        grid_center = min(max(current_price, lower_price), upper_price)
+        return self._generate_grid_prices(grid_center, grid_step, num_grids)
 
     def _generate_grid_prices(self, center_price, grid_step, num_grids):
         """生成网格价格"""
