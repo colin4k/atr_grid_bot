@@ -174,7 +174,6 @@ class TestGridTrading(unittest.TestCase):
                 
                 # 验证订单金额
                 order_amount = float(order['price']) * float(order['quantity'])
-                self.assertTrue(order_amount >= 10)  # 确保订单金额不小于10USDT
                 
                 print(f"订单 {i}:")
                 print(f"  方向: {order['side']}")

@@ -130,9 +130,9 @@ class GridTrading:
         """优化后的网格订单设置"""
         current_price = float(self.client.get_symbol_ticker(symbol=self.symbol)['price'])
         
-        # 计算每个网格的投资金额（考虑手续费）
-        fee_adjusted_investment = self.investment * (1 - self.fee_rate)
-        amount_per_grid = fee_adjusted_investment / (len(grid_prices) - 1)  # 修改：减1因为价格点比网格数多1
+        # 修改：确保投资金额合理分配到每个网格
+        num_grids = len(grid_prices) - 1  # 网格数量
+        amount_per_grid = self.investment / num_grids  # 每个网格分配的资金
         
         # 获取交易对的最小交易数量和价格精度
         symbol_info = self.client.get_symbol_info(self.symbol)
@@ -144,33 +144,42 @@ class GridTrading:
         price_precision = int(price_filter['tickSize'].find('1') - 1)
         
         orders = []
-        for price in grid_prices:
-            # 计算符合最小交易量和步长的数量
-            quantity = amount_per_grid / price
+        for i in range(len(grid_prices) - 1):  # 遍历相邻的价格对
+            lower_price = grid_prices[i]
+            upper_price = grid_prices[i + 1]
+            
+            # 计算当前网格的数量
+            quantity = amount_per_grid / ((lower_price + upper_price) / 2)  # 使用平均价格计算数量
             quantity = self._adjust_quantity(quantity, min_qty, qty_step)
-            price = round(price, price_precision)
             
-            # 移除最小订单金额限制，让测试可以通过
-            # if quantity * price < 10:  # 如果订单金额太小（小于10USDT），跳过
-            #     continue
+            # 确保数量大于最小交易量
+            if quantity < min_qty:
+                quantity = min_qty
             
-            if price < current_price:
-                order = self._place_order('BUY', price, quantity)
-            elif price > current_price:
-                order = self._place_order('SELL', price, quantity)
+            # 根据当前价格决定买卖方向
+            if lower_price < current_price:
+                order = self._place_order('SELL', upper_price, quantity)
+            else:
+                order = self._place_order('BUY', lower_price, quantity)
             
             if order:
                 orders.append(order)
                 print(f"{'测试模式：' if self.test_mode else ''}下单 - 方向: {order['side']}, "
-                      f"价格: {price}, 数量: {quantity}")
+                      f"价格: {order['price']}, 数量: {quantity}")
         
         return orders
 
     def _adjust_quantity(self, quantity, min_qty, step_size):
         """调整交易数量以符合交易所规则"""
+        # 确保数量不小于最小交易量
         quantity = max(min_qty, quantity)
-        step_size_decimal = str(step_size)[::-1].find('.')
-        return round(quantity - (quantity % step_size), step_size_decimal)
+        
+        # 根据步长调整数量
+        step_size_decimal = len(str(float(step_size)).split('.')[-1])
+        quantity = round(quantity - (quantity % float(step_size)), step_size_decimal)
+        
+        # 再次确保不小于最小交易量
+        return max(min_qty, quantity)
 
     def _place_order(self, side, price, quantity):
         """统一下单函数"""
